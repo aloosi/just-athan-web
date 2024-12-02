@@ -1,0 +1,91 @@
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 10px;
+  max-width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: #1e3c72;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #666;
+  padding: 0.5rem;
+}
+
+.close-button:hover {
+  color: #1e3c72;
+}
+
+.calculation-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.calculation-table th,
+.calculation-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.calculation-table th {
+  background-color: #f8f9fa;
+  color: #1e3c72;
+  font-weight: 600;
+}
+
+.calculation-table tr:last-child td {
+  border-bottom: none;
+}
+
+.calculation-table tr:hover td {
+  background-color: #f8f9fa;
+}
+
+@media (max-width: 768px) {
+  .modal-content {
+    padding: 1rem;
+    max-width: 95%;
+  }
+
+  .calculation-table {
+    font-size: 0.9rem;
+  }
+
+  .calculation-table th,
+  .calculation-table td {
+    padding: 0.5rem;
+  }
+}
