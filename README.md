@@ -99,8 +99,8 @@ Contributions are welcome! Feel free to:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Acknowledgments
+## Learn More
 
-- Prayer times calculation methods from various Islamic organizations
-- [Aladhan API](https://aladhan.com/prayer-times-api) for providing prayer times data
-- The Muslim community for feedback and suggestions
+You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+
+To learn React, check out the [React documentation](https://reactjs.org/).
