@@ -1,192 +1,356 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import '../styles/PrayerTimes.css';
+import { format } from 'date-fns';
+import HijriConverter from 'hijri-converter';
+import CalculationMethodModal from './CalculationMethodModal';
+import LocationModal from './LocationModal';
 
-interface PrayerTimesData {
-  [key: string]: string;
-}
-
-interface NextPrayer {
+interface PrayerTime {
   name: string;
   time: string;
 }
 
+interface PrayerData {
+  fajr: string;
+  sunrise: string;
+  dhuhr: string;
+  asr: string;
+  maghrib: string;
+  isha: string;
+  midnight: string;
+}
+
+interface CalculationMethod {
+  id: number;
+  name: string;
+  description: string;
+}
+
+interface Location {
+  city: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+}
+
+const CALCULATION_METHODS: CalculationMethod[] = [
+  { id: 3, name: 'Muslim World League', description: 'Standard method used in Europe, Far East, and parts of the US' },
+  { id: 5, name: 'Egyptian General Authority', description: 'Used in Africa, Syria, Iraq, Lebanon, Malaysia, and parts of the US' },
+  { id: 1, name: 'University of Islamic Sciences, Karachi', description: 'Used in Pakistan, Bangladesh, India, Afghanistan, and parts of Europe' },
+  { id: 4, name: 'Umm Al-Qura University, Makkah', description: 'Used in the Arabian Peninsula' },
+  { id: 2, name: 'Islamic Society of North America', description: 'Used in North America' },
+  { id: 12, name: 'Union Organization islamic de France', description: 'Used in France' },
+  { id: 11, name: 'Majlis Ugama Islam Singapura', description: 'Used in Singapore' },
+  { id: 0, name: 'Jafari / Shia Ithna-Ashari', description: 'Shia Ithna-Ashari method' }
+];
+
+const STORAGE_KEY = 'just-athan-calculation-method';
+const LOCATION_STORAGE_KEY = 'just-athan-location';
+
 const PrayerTimes: React.FC = () => {
-  const [times, setTimes] = useState<PrayerTimesData>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [date, setDate] = useState(new Date());
-  const [nextPrayer, setNextPrayer] = useState<NextPrayer | null>(null);
-  const [countdown, setCountdown] = useState("");
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [prayerTimes, setPrayerTimes] = useState<PrayerData | null>(null);
+  const [nextPrayer, setNextPrayer] = useState<PrayerTime | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const [notificationPermission, setNotificationPermission] = useState<boolean>(false);
+  const [calculationMethod, setCalculationMethod] = useState<number>(() => {
+    const savedMethod = localStorage.getItem(STORAGE_KEY);
+    return savedMethod ? parseInt(savedMethod) : 2;
+  });
+  const [location, setLocation] = useState<Location | null>(() => {
+    const savedLocation = localStorage.getItem(LOCATION_STORAGE_KEY);
+    return savedLocation ? JSON.parse(savedLocation) : null;
+  });
+  const [showCalculationModal, setShowCalculationModal] = useState<boolean>(false);
+  const [showLocationModal, setShowLocationModal] = useState<boolean>(false);
+  const [countdownInterval, setCountdownInterval] = useState<NodeJS.Timeout | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const prayerNames = {
-    Fajr: "Fajr",
-    Sunrise: "Sunrise",
-    Dhuhr: "Dhuhr",
-    Asr: "Asr",
-    Maghrib: "Maghrib",
-    Isha: "Isha"
+  const formatTimeRemaining = (milliseconds: number): string => {
+    if (milliseconds < 0) return '0h 0m 0s';
+    const hours = Math.floor(milliseconds / (1000 * 60 * 60));
+    const minutes = Math.floor((milliseconds % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((milliseconds % (1000 * 60)) / 1000);
+    return `${hours}h ${minutes}m ${seconds}s`;
   };
 
-  const convertTo12Hour = (time24: string): string => {
-    const [hours, minutes] = time24.split(':').map(Number);
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const hours12 = hours % 12 || 12;
-    return `${hours12.toString().padStart(2, ' ')}:${minutes.toString().padStart(2, '0')} ${period}`;
+  const getHijriDate = (): string => {
+    const today = new Date();
+    const hijriDate = HijriConverter.toHijri(today.getFullYear(), today.getMonth() + 1, today.getDate());
+    const hijriMonths = [
+      'Muharram', 'Safar', 'Rabi Al-Awwal', 'Rabi Al-Thani',
+      'Jumada Al-Awwal', 'Jumada Al-Akhira', 'Rajab', 'Sha\'ban',
+      'Ramadan', 'Shawwal', 'Dhul-Qadah', 'Dhul-Hijjah'
+    ];
+    return `${hijriDate.hd} ${hijriMonths[hijriDate.hm - 1]}, ${hijriDate.hy}`;
   };
 
-  const calculateNextPrayer = (prayerTimes: PrayerTimesData): NextPrayer => {
-    const now = new Date();
-    const currentTime = now.getHours() * 60 + now.getMinutes();
+  const startCountdown = useCallback((nextPrayerDate: Date) => {
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+    }
+
+    const updateTimeRemaining = () => {
+      const now = new Date();
+      const timeDiff = nextPrayerDate.getTime() - now.getTime();
+      setTimeRemaining(formatTimeRemaining(timeDiff));
+    };
+
+    updateTimeRemaining();
+    const interval = setInterval(updateTimeRemaining, 1000);
+    setCountdownInterval(interval);
+  }, [countdownInterval]);
+
+  const fetchPrayerTimes = useCallback(async (coords: { latitude: number; longitude: number }) => {
+    try {
+      const date = new Date();
+      const response = await fetch(
+        `http://api.aladhan.com/v1/timings/${date.getDate()}-${date.getMonth() + 1}-${date.getFullYear()}?latitude=${coords.latitude}&longitude=${coords.longitude}&method=${calculationMethod}`
+      );
+      const data = await response.json();
+      
+      if (data.code === 200) {
+        setPrayerTimes({
+          fajr: data.data.timings.Fajr,
+          sunrise: data.data.timings.Sunrise,
+          dhuhr: data.data.timings.Dhuhr,
+          asr: data.data.timings.Asr,
+          maghrib: data.data.timings.Maghrib,
+          isha: data.data.timings.Isha,
+          midnight: data.data.timings.Midnight
+        });
+        setError('');
+      } else {
+        setError('Failed to fetch prayer times');
+      }
+    } catch (error) {
+      setError('Failed to fetch prayer times');
+    }
+  }, [calculationMethod]);
+
+  const fetchLocationCoordinates = async (city: string, country: string): Promise<Location> => {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}&format=json`
+    );
+    const data = await response.json();
     
-    const timeToMinutes = (timeStr: string): number => {
-      const [hours, minutes] = timeStr.split(':').map(Number);
-      return hours * 60 + minutes;
-    };
-
-    // Convert all prayer times to minutes and pair with their names
-    const prayerTimesArray = Object.entries(prayerNames)
-      .map(([key, name]) => ({
-        name,
-        minutes: timeToMinutes(prayerTimes[key])
-      }))
-      .sort((a, b) => a.minutes - b.minutes);
-
-    // Find the next prayer
-    const nextPrayer = prayerTimesArray.find(prayer => prayer.minutes > currentTime);
-
-    // If no next prayer found, it means we're past Isha, so next prayer is tomorrow's Fajr
-    if (!nextPrayer) {
-      return {
-        name: prayerTimesArray[0].name,
-        time: prayerTimes[Object.keys(prayerNames)[0]]
-      };
+    if (!data || data.length === 0) {
+      throw new Error('Location not found');
     }
 
-    // Return the next prayer's details
     return {
-      name: nextPrayer.name,
-      time: prayerTimes[Object.entries(prayerNames).find(([_, name]) => name === nextPrayer.name)![0]]
+      city,
+      country,
+      latitude: parseFloat(data[0].lat),
+      longitude: parseFloat(data[0].lon)
     };
   };
 
-  const updateCountdown = () => {
-    if (!nextPrayer?.time) return;
-
-    const now = new Date();
-    const [prayerHours, prayerMinutes] = nextPrayer.time.split(':').map(Number);
-    const prayerTime = new Date(now);
-    prayerTime.setHours(prayerHours, prayerMinutes, 0);
-
-    // If the prayer time is earlier than now, it means it's for tomorrow
-    if (prayerTime < now) {
-      prayerTime.setDate(prayerTime.getDate() + 1);
+  const handleLocationSelect = async (city: string, country: string) => {
+    try {
+      setIsLoading(true);
+      const newLocation = await fetchLocationCoordinates(city, country);
+      setLocation(newLocation);
+      localStorage.setItem(LOCATION_STORAGE_KEY, JSON.stringify(newLocation));
+      setShowLocationModal(false);
+      setError('');
+    } catch (err) {
+      setError('Failed to find location. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
-
-    const diff = prayerTime.getTime() - now.getTime();
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    setCountdown(`${hours}h ${minutes}m`);
   };
+
+  useEffect(() => {
+    const getPrayerTimes = async () => {
+      try {
+        setIsLoading(true);
+        if (location) {
+          await fetchPrayerTimes(location);
+        } else if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            async (position) => {
+              await fetchPrayerTimes(position.coords);
+            },
+            (error) => {
+              setError('Failed to get location. Please set your location manually.');
+              setShowLocationModal(true);
+            }
+          );
+        } else {
+          setError('Geolocation is not supported. Please set your location manually.');
+          setShowLocationModal(true);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    getPrayerTimes();
+    const interval = setInterval(getPrayerTimes, 1000 * 60 * 60); // Update every hour
+
+    return () => {
+      clearInterval(interval);
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+      }
+    };
+  }, [location, fetchPrayerTimes, countdownInterval]);
+
+  useEffect(() => {
+    const calculateNextPrayer = () => {
+      if (!prayerTimes) return;
+
+      const now = new Date();
+      const prayers: PrayerTime[] = [
+        { name: 'Fajr', time: prayerTimes.fajr },
+        { name: 'Sunrise', time: prayerTimes.sunrise },
+        { name: 'Dhuhr', time: prayerTimes.dhuhr },
+        { name: 'Asr', time: prayerTimes.asr },
+        { name: 'Maghrib', time: prayerTimes.maghrib },
+        { name: 'Isha', time: prayerTimes.isha },
+      ];
+
+      const prayerTimeObjects = prayers.map(prayer => {
+        const [hours, minutes] = prayer.time.split(':');
+        const prayerDate = new Date();
+        prayerDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+        return { ...prayer, date: prayerDate };
+      });
+
+      const nextPrayerObj = prayerTimeObjects.find(prayer => prayer.date > now) ||
+        { ...prayerTimeObjects[0], date: new Date(prayerTimeObjects[0].date.getTime() + 24 * 60 * 60 * 1000) };
+
+      setNextPrayer({ name: nextPrayerObj.name, time: format(nextPrayerObj.date, 'h:mm a') });
+      startCountdown(nextPrayerObj.date);
+    };
+
+    calculateNextPrayer();
+    const interval = setInterval(calculateNextPrayer, 60000);
+    return () => {
+      clearInterval(interval);
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+      }
+    };
+  }, [prayerTimes, startCountdown, countdownInterval]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, calculationMethod.toString());
+  }, [calculationMethod]);
 
   const requestNotificationPermission = async () => {
     try {
       const permission = await Notification.requestPermission();
-      setNotificationsEnabled(permission === "granted");
+      setNotificationPermission(permission === 'granted');
     } catch (error) {
-      console.error("Error requesting notification permission:", error);
+      console.error('Error requesting notification permission:', error);
     }
   };
 
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const response = await fetch(
-              `https://api.aladhan.com/v1/timings/${Math.floor(Date.now() / 1000)}?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&method=2`
-            );
-            if (!response.ok) {
-              throw new Error("Failed to fetch prayer times");
-            }
-            const data = await response.json();
-            setTimes(data.data.timings);
-            setDate(new Date(data.data.date.readable));
-            const next = calculateNextPrayer(data.data.timings);
-            setNextPrayer(next);
-          } catch (err) {
-            setError(err instanceof Error ? err.message : "An error occurred");
-          } finally {
-            setLoading(false);
-          }
-        },
-        (err) => {
-          setError("Error getting location. Please enable location services.");
-          setLoading(false);
-        }
-      );
-    } else {
-      setError("Geolocation is not supported by your browser");
-      setLoading(false);
-    }
-  }, []);
+  const formatTime = (time: string): string => {
+    const [hours, minutes] = time.split(':');
+    const date = new Date();
+    date.setHours(parseInt(hours), parseInt(minutes));
+    return format(date, 'h:mm a');
+  };
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      updateCountdown();
-    }, 1000); // Update every second instead of every minute
-
-    return () => clearInterval(timer);
-  }, [nextPrayer]);
-
-  if (loading) {
-    return <div className="prayer-container">Loading prayer times...</div>;
-  }
+  const handleMethodChange = (methodId: number) => {
+    setCalculationMethod(methodId);
+    setShowCalculationModal(false);
+  };
 
   if (error) {
-    return <div className="prayer-container error">{error}</div>;
+    return (
+      <div className="prayer-container">
+        <div className="error">{error}</div>
+        <button className="location-button" onClick={() => setShowLocationModal(true)}>
+          Set Location Manually
+        </button>
+        <LocationModal
+          isOpen={showLocationModal}
+          onClose={() => setShowLocationModal(false)}
+          onLocationSelect={handleLocationSelect}
+        />
+      </div>
+    );
   }
 
   return (
     <div className="prayer-container">
       <div className="prayer-header">
         <h1>Prayer Times</h1>
-        <div className="date">{date.toLocaleDateString()}</div>
+        <div className="date">
+          {format(new Date(), 'EEE, MMMM d, yyyy')}
+          <br />
+          {getHijriDate()}
+        </div>
       </div>
 
-      {nextPrayer && (
-        <div className="next-prayer">
-          <h2>Next Prayer</h2>
-          <div className="next-prayer-details">
-            <span className="prayer-name">{nextPrayer.name}</span>
-            <span className="prayer-time">{convertTo12Hour(nextPrayer.time)}</span>
-          </div>
-          <div className="countdown">Time remaining: {countdown}</div>
+      {location && (
+        <div className="location-info">
+          <span>{location.city}, {location.country}</span>
+          <button onClick={() => setShowLocationModal(true)}>Change</button>
         </div>
       )}
 
-      <table className="prayer-times">
-        <tbody>
-          {Object.entries(prayerNames).map(([key, name]) => (
-            <tr
-              key={key}
-              className={nextPrayer?.name === name ? "next-prayer-row" : ""}
-            >
-              <td>{name}</td>
-              <td>{convertTo12Hour(times[key])}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {isLoading ? (
+        <div className="loading">Loading prayer times...</div>
+      ) : (
+        <>
+          {nextPrayer && (
+            <div className="next-prayer">
+              <h2>Next Prayer</h2>
+              <div className="next-prayer-details">
+                <span className="prayer-name">{nextPrayer.name}</span>
+                <span className="prayer-time">{nextPrayer.time}</span>
+              </div>
+              <div className="countdown">Time remaining: {timeRemaining}</div>
+            </div>
+          )}
 
-      {!notificationsEnabled && (
-        <button
-          className="notification-button"
-          onClick={requestNotificationPermission}
-        >
+          {prayerTimes && (
+            <>
+              <div className="calculation-method">
+                <span>{CALCULATION_METHODS.find(m => m.id === calculationMethod)?.name}</span>
+                <button onClick={() => setShowCalculationModal(true)}>Change</button>
+                <button className="info-button" onClick={() => setShowCalculationModal(true)}>i</button>
+              </div>
+              <table className="prayer-times">
+                <tbody>
+                  <tr><td>Fajr</td><td>{formatTime(prayerTimes.fajr)}</td></tr>
+                  <tr><td>Sunrise</td><td>{formatTime(prayerTimes.sunrise)}</td></tr>
+                  <tr><td>Dhuhr</td><td>{formatTime(prayerTimes.dhuhr)}</td></tr>
+                  <tr><td>Asr</td><td>{formatTime(prayerTimes.asr)}</td></tr>
+                  <tr><td>Maghrib</td><td>{formatTime(prayerTimes.maghrib)}</td></tr>
+                  <tr><td>Isha</td><td>{formatTime(prayerTimes.isha)}</td></tr>
+                  <tr><td>Midnight (Qiyam)</td><td>{formatTime(prayerTimes.midnight)}</td></tr>
+                </tbody>
+              </table>
+            </>
+          )}
+        </>
+      )}
+
+      {!notificationPermission && (
+        <button className="notification-button" onClick={requestNotificationPermission}>
           Enable Notifications
         </button>
       )}
+
+      <CalculationMethodModal
+        isOpen={showCalculationModal}
+        onClose={() => setShowCalculationModal(false)}
+        methods={CALCULATION_METHODS}
+        selectedMethod={calculationMethod}
+        onMethodSelect={handleMethodChange}
+      />
+
+      <LocationModal
+        isOpen={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+        onLocationSelect={handleLocationSelect}
+      />
     </div>
   );
 };
