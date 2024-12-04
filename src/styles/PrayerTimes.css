@@ -179,61 +179,6 @@ body {
     font-family: serif;
 }
 
-.location-info {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-    padding: 0.75rem;
-    background-color: rgba(30, 60, 114, 0.05);
-    border-radius: 8px;
-}
-
-.location-info span {
-    color: #1e3c72;
-    font-weight: 500;
-}
-
-.location-info button {
-    padding: 0.5rem 1rem;
-    background-color: #1e3c72;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: background-color 0.2s ease;
-}
-
-.location-info button:hover {
-    background-color: #15294f;
-}
-
-.location-button {
-    display: block;
-    margin: 1rem auto;
-    padding: 0.75rem 1.5rem;
-    background-color: #1e3c72;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 1rem;
-    transition: background-color 0.2s ease;
-}
-
-.location-button:hover {
-    background-color: #15294f;
-}
-
-.loading {
-    text-align: center;
-    color: #666;
-    margin: 2rem 0;
-    font-size: 1.1rem;
-}
-
 /* Mobile-specific adjustments */
 @media screen and (max-width: 480px) {
     .prayer-container {

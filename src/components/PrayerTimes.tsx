@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import '../styles/PrayerTimes.css';
 import { format } from 'date-fns';
 import HijriConverter from 'hijri-converter';
 import CalculationMethodModal from './CalculationMethodModal';
-import LocationModal from './LocationModal';
 
 interface PrayerTime {
   name: string;
@@ -26,13 +25,6 @@ interface CalculationMethod {
   description: string;
 }
 
-interface Location {
-  city: string;
-  country: string;
-  latitude: number;
-  longitude: number;
-}
-
 const CALCULATION_METHODS: CalculationMethod[] = [
   { id: 3, name: 'Muslim World League', description: 'Standard method used in Europe, Far East, and parts of the US' },
   { id: 5, name: 'Egyptian General Authority', description: 'Used in Africa, Syria, Iraq, Lebanon, Malaysia, and parts of the US' },
@@ -45,7 +37,6 @@ const CALCULATION_METHODS: CalculationMethod[] = [
 ];
 
 const STORAGE_KEY = 'just-athan-calculation-method';
-const LOCATION_STORAGE_KEY = 'just-athan-location';
 
 const PrayerTimes: React.FC = () => {
   const [prayerTimes, setPrayerTimes] = useState<PrayerData | null>(null);
@@ -55,16 +46,10 @@ const PrayerTimes: React.FC = () => {
   const [notificationPermission, setNotificationPermission] = useState<boolean>(false);
   const [calculationMethod, setCalculationMethod] = useState<number>(() => {
     const savedMethod = localStorage.getItem(STORAGE_KEY);
-    return savedMethod ? parseInt(savedMethod) : 2;
-  });
-  const [location, setLocation] = useState<Location | null>(() => {
-    const savedLocation = localStorage.getItem(LOCATION_STORAGE_KEY);
-    return savedLocation ? JSON.parse(savedLocation) : null;
+    return savedMethod ? parseInt(savedMethod) : 2; // Default to ISNA if no saved preference
   });
   const [showCalculationModal, setShowCalculationModal] = useState<boolean>(false);
-  const [showLocationModal, setShowLocationModal] = useState<boolean>(false);
   const [countdownInterval, setCountdownInterval] = useState<NodeJS.Timeout | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const formatTimeRemaining = (milliseconds: number): string => {
     if (milliseconds < 0) return '0h 0m 0s';
@@ -85,7 +70,8 @@ const PrayerTimes: React.FC = () => {
     return `${hijriDate.hd} ${hijriMonths[hijriDate.hm - 1]}, ${hijriDate.hy}`;
   };
 
-  const startCountdown = useCallback((nextPrayerDate: Date) => {
+  const startCountdown = (nextPrayerDate: Date) => {
+    // Clear existing interval if any
     if (countdownInterval) {
       clearInterval(countdownInterval);
     }
@@ -99,95 +85,44 @@ const PrayerTimes: React.FC = () => {
     updateTimeRemaining();
     const interval = setInterval(updateTimeRemaining, 1000);
     setCountdownInterval(interval);
-  }, [countdownInterval]);
-
-  const fetchPrayerTimes = useCallback(async (coords: { latitude: number; longitude: number }) => {
-    try {
-      const date = new Date();
-      const response = await fetch(
-        `http://api.aladhan.com/v1/timings/${date.getDate()}-${date.getMonth() + 1}-${date.getFullYear()}?latitude=${coords.latitude}&longitude=${coords.longitude}&method=${calculationMethod}`
-      );
-      const data = await response.json();
-      
-      if (data.code === 200) {
-        setPrayerTimes({
-          fajr: data.data.timings.Fajr,
-          sunrise: data.data.timings.Sunrise,
-          dhuhr: data.data.timings.Dhuhr,
-          asr: data.data.timings.Asr,
-          maghrib: data.data.timings.Maghrib,
-          isha: data.data.timings.Isha,
-          midnight: data.data.timings.Midnight
-        });
-        setError('');
-      } else {
-        setError('Failed to fetch prayer times');
-      }
-    } catch (error) {
-      setError('Failed to fetch prayer times');
-    }
-  }, [calculationMethod]);
-
-  const fetchLocationCoordinates = async (city: string, country: string): Promise<Location> => {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}&format=json`
-    );
-    const data = await response.json();
-    
-    if (!data || data.length === 0) {
-      throw new Error('Location not found');
-    }
-
-    return {
-      city,
-      country,
-      latitude: parseFloat(data[0].lat),
-      longitude: parseFloat(data[0].lon)
-    };
-  };
-
-  const handleLocationSelect = async (city: string, country: string) => {
-    try {
-      setIsLoading(true);
-      const newLocation = await fetchLocationCoordinates(city, country);
-      setLocation(newLocation);
-      localStorage.setItem(LOCATION_STORAGE_KEY, JSON.stringify(newLocation));
-      setShowLocationModal(false);
-      setError('');
-    } catch (err) {
-      setError('Failed to find location. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   useEffect(() => {
-    const getPrayerTimes = async () => {
+    const fetchPrayerTimes = async () => {
       try {
-        setIsLoading(true);
-        if (location) {
-          await fetchPrayerTimes(location);
-        } else if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            async (position) => {
-              await fetchPrayerTimes(position.coords);
-            },
-            (error) => {
-              setError('Failed to get location. Please set your location manually.');
-              setShowLocationModal(true);
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(async (position) => {
+            const { latitude, longitude } = position.coords;
+            const date = new Date();
+            const response = await fetch(
+              `http://api.aladhan.com/v1/timings/${date.getDate()}-${date.getMonth() + 1}-${date.getFullYear()}?latitude=${latitude}&longitude=${longitude}&method=${calculationMethod}`
+            );
+            const data = await response.json();
+            
+            if (data.code === 200) {
+              setPrayerTimes({
+                fajr: data.data.timings.Fajr,
+                sunrise: data.data.timings.Sunrise,
+                dhuhr: data.data.timings.Dhuhr,
+                asr: data.data.timings.Asr,
+                maghrib: data.data.timings.Maghrib,
+                isha: data.data.timings.Isha,
+                midnight: data.data.timings.Midnight
+              });
+            } else {
+              setError('Failed to fetch prayer times');
             }
-          );
+          });
         } else {
-          setError('Geolocation is not supported. Please set your location manually.');
-          setShowLocationModal(true);
+          setError('Geolocation is not supported by your browser');
         }
-      } finally {
-        setIsLoading(false);
+      } catch (error) {
+        setError('Failed to fetch prayer times');
       }
     };
 
-    getPrayerTimes();
-    const interval = setInterval(getPrayerTimes, 1000 * 60 * 60); // Update every hour
+    fetchPrayerTimes();
+    const interval = setInterval(fetchPrayerTimes, 1000 * 60 * 60); // Update every hour
 
     return () => {
       clearInterval(interval);
@@ -195,7 +130,7 @@ const PrayerTimes: React.FC = () => {
         clearInterval(countdownInterval);
       }
     };
-  }, [location, fetchPrayerTimes, countdownInterval]);
+  }, [calculationMethod]);
 
   useEffect(() => {
     const calculateNextPrayer = () => {
@@ -233,8 +168,9 @@ const PrayerTimes: React.FC = () => {
         clearInterval(countdownInterval);
       }
     };
-  }, [prayerTimes, startCountdown, countdownInterval]);
+  }, [prayerTimes]);
 
+  // Save calculation method to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, calculationMethod.toString());
   }, [calculationMethod]);
@@ -261,19 +197,7 @@ const PrayerTimes: React.FC = () => {
   };
 
   if (error) {
-    return (
-      <div className="prayer-container">
-        <div className="error">{error}</div>
-        <button className="location-button" onClick={() => setShowLocationModal(true)}>
-          Set Location Manually
-        </button>
-        <LocationModal
-          isOpen={showLocationModal}
-          onClose={() => setShowLocationModal(false)}
-          onLocationSelect={handleLocationSelect}
-        />
-      </div>
-    );
+    return <div className="error">{error}</div>;
   }
 
   return (
@@ -287,48 +211,35 @@ const PrayerTimes: React.FC = () => {
         </div>
       </div>
 
-      {location && (
-        <div className="location-info">
-          <span>{location.city}, {location.country}</span>
-          <button onClick={() => setShowLocationModal(true)}>Change</button>
+      {nextPrayer && (
+        <div className="next-prayer">
+          <h2>Next Prayer</h2>
+          <div className="next-prayer-details">
+            <span className="prayer-name">{nextPrayer.name}</span>
+            <span className="prayer-time">{nextPrayer.time}</span>
+          </div>
+          <div className="countdown">Time remaining: {timeRemaining}</div>
         </div>
       )}
 
-      {isLoading ? (
-        <div className="loading">Loading prayer times...</div>
-      ) : (
+      {prayerTimes && (
         <>
-          {nextPrayer && (
-            <div className="next-prayer">
-              <h2>Next Prayer</h2>
-              <div className="next-prayer-details">
-                <span className="prayer-name">{nextPrayer.name}</span>
-                <span className="prayer-time">{nextPrayer.time}</span>
-              </div>
-              <div className="countdown">Time remaining: {timeRemaining}</div>
-            </div>
-          )}
-
-          {prayerTimes && (
-            <>
-              <div className="calculation-method">
-                <span>{CALCULATION_METHODS.find(m => m.id === calculationMethod)?.name}</span>
-                <button onClick={() => setShowCalculationModal(true)}>Change</button>
-                <button className="info-button" onClick={() => setShowCalculationModal(true)}>i</button>
-              </div>
-              <table className="prayer-times">
-                <tbody>
-                  <tr><td>Fajr</td><td>{formatTime(prayerTimes.fajr)}</td></tr>
-                  <tr><td>Sunrise</td><td>{formatTime(prayerTimes.sunrise)}</td></tr>
-                  <tr><td>Dhuhr</td><td>{formatTime(prayerTimes.dhuhr)}</td></tr>
-                  <tr><td>Asr</td><td>{formatTime(prayerTimes.asr)}</td></tr>
-                  <tr><td>Maghrib</td><td>{formatTime(prayerTimes.maghrib)}</td></tr>
-                  <tr><td>Isha</td><td>{formatTime(prayerTimes.isha)}</td></tr>
-                  <tr><td>Midnight (Qiyam)</td><td>{formatTime(prayerTimes.midnight)}</td></tr>
-                </tbody>
-              </table>
-            </>
-          )}
+          <div className="calculation-method">
+            <span>{CALCULATION_METHODS.find(m => m.id === calculationMethod)?.name}</span>
+            <button onClick={() => setShowCalculationModal(true)}>Change</button>
+            <button className="info-button" onClick={() => setShowCalculationModal(true)}>i</button>
+          </div>
+          <table className="prayer-times">
+            <tbody>
+              <tr><td>Fajr</td><td>{formatTime(prayerTimes.fajr)}</td></tr>
+              <tr><td>Sunrise</td><td>{formatTime(prayerTimes.sunrise)}</td></tr>
+              <tr><td>Dhuhr</td><td>{formatTime(prayerTimes.dhuhr)}</td></tr>
+              <tr><td>Asr</td><td>{formatTime(prayerTimes.asr)}</td></tr>
+              <tr><td>Maghrib</td><td>{formatTime(prayerTimes.maghrib)}</td></tr>
+              <tr><td>Isha</td><td>{formatTime(prayerTimes.isha)}</td></tr>
+              <tr><td>Midnight (Qiyam)</td><td>{formatTime(prayerTimes.midnight)}</td></tr>
+            </tbody>
+          </table>
         </>
       )}
 
@@ -344,12 +255,6 @@ const PrayerTimes: React.FC = () => {
         methods={CALCULATION_METHODS}
         selectedMethod={calculationMethod}
         onMethodSelect={handleMethodChange}
-      />
-
-      <LocationModal
-        isOpen={showLocationModal}
-        onClose={() => setShowLocationModal(false)}
-        onLocationSelect={handleLocationSelect}
       />
     </div>
   );
