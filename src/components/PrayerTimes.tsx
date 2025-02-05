@@ -100,7 +100,7 @@ const PrayerTimes: React.FC = () => {
             const { latitude, longitude } = position.coords;
             const date = new Date();
             const response = await fetch(
-              `http://api.aladhan.com/v1/timings/${date.getDate()}-${date.getMonth() + 1}-${date.getFullYear()}?latitude=${latitude}&longitude=${longitude}&method=${calculationMethod}`
+              `/api/prayertimes?date=${date.getDate()}-${date.getMonth() + 1}-${date.getFullYear()}&latitude=${latitude}&longitude=${longitude}&method=${calculationMethod}`
             );
             const data = await response.json();
             
