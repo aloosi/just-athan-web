@@ -3,6 +3,7 @@ import '../styles/PrayerTimes.css';
 import { format } from 'date-fns';
 import HijriConverter from 'hijri-converter';
 import CalculationMethodModal from './CalculationMethodModal';
+import { generateToken } from '../notifications/firebase';
 
 interface PrayerTime {
   name: string;
@@ -39,6 +40,10 @@ const CALCULATION_METHODS: CalculationMethod[] = [
 const STORAGE_KEY = 'just-athan-calculation-method';
 
 const PrayerTimes: React.FC = () => {
+
+  useEffect(() => {
+    generateToken();
+  },[]);
   const [prayerTimes, setPrayerTimes] = useState<PrayerData | null>(null);
   const [nextPrayer, setNextPrayer] = useState<PrayerTime | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<string>('');
@@ -242,12 +247,13 @@ const PrayerTimes: React.FC = () => {
           </table>
         </>
       )}
-
+{/**
       {!notificationPermission && (
         <button className="notification-button" onClick={requestNotificationPermission}>
           Enable Notifications
         </button>
       )}
+ */}
 
       <CalculationMethodModal
         isOpen={showCalculationModal}
