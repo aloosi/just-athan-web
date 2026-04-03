@@ -1,54 +1,60 @@
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
+  padding: 1rem;
 }
 
 .modal-content {
-  background: white;
+  background: var(--primary-bg);
+  border: 1px solid var(--accent-gold-glow);
+  border-radius: 20px;
   padding: 1.5rem;
-  border-radius: 10px;
-  max-width: 90%;
-  max-height: 90vh;
-  width: 600px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 85vh;
   overflow-y: auto;
-  position: relative;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  animation: modalIn 0.3s ease-out;
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid #eee;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--glass-border);
 }
 
 .modal-header h2 {
-  margin: 0;
-  color: #1e3c72;
+  color: var(--accent-gold);
+  font-family: var(--font-amiri);
   font-size: 1.5rem;
 }
 
 .close-button {
   background: none;
   border: none;
-  font-size: 1.5rem;
+  color: var(--text-secondary);
+  font-size: 2rem;
+  line-height: 1;
   cursor: pointer;
-  color: #666;
-  padding: 0.5rem;
+  transition: color 0.2s;
 }
 
 .close-button:hover {
-  color: #1e3c72;
+  color: var(--text-primary);
 }
 
 .calculation-methods-list {
@@ -59,48 +65,50 @@
 
 .calculation-method-item {
   padding: 1rem;
-  border-radius: 8px;
-  border: 1px solid #eee;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.02);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
 }
 
 .calculation-method-item:hover {
-  border-color: #1e3c72;
-  background-color: rgba(30, 60, 114, 0.05);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .calculation-method-item.selected {
-  border-color: #1e3c72;
-  background-color: rgba(30, 60, 114, 0.1);
+  background: rgba(212, 175, 55, 0.1);
+  border-color: var(--accent-gold);
 }
 
 .method-name {
   font-weight: 600;
-  color: #1e3c72;
+  color: var(--text-primary);
   margin-bottom: 0.25rem;
 }
 
-.method-description {
-  font-size: 0.9rem;
-  color: #666;
+.selected .method-name {
+  color: var(--accent-gold);
 }
 
-@media (max-width: 768px) {
-  .modal-content {
-    padding: 1rem;
-    max-width: 95%;
-  }
+.method-description {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
 
-  .calculation-method-item {
-    padding: 0.75rem;
-  }
-
-  .method-name {
-    font-size: 0.95rem;
-  }
-
-  .method-description {
-    font-size: 0.85rem;
-  }
+/* Custom Scrollbar */
+.modal-content::-webkit-scrollbar {
+  width: 6px;
+}
+.modal-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.modal-content::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 4px;
+}
+.modal-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }

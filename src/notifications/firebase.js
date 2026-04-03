@@ -24,7 +24,15 @@ const messaging = getMessaging(app);
 // const analytics = getAnalytics(app);
 
 
-export const generateToken  = async () => {
-    const permission = await Notification.requestPermission();
-    console.log(permission);
+export const generateToken = async () => {
+    try {
+        if (!("Notification" in window)) {
+            console.log("This browser does not support desktop notification");
+            return;
+        }
+        const permission = await Notification.requestPermission();
+        console.log("Notification permission:", permission);
+    } catch (error) {
+        console.error("Error requesting notification permission:", error);
+    }
 }
