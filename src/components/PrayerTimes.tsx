@@ -38,7 +38,55 @@ const CALCULATION_METHODS: CalculationMethod[] = [
 ];
 
 const STORAGE_KEY = 'just-athan-calculation-method';
+const LOCATION_CACHE_KEY = 'just-athan-location-cache';
+const ATHAN_ENABLED_KEY = 'just-athan-athan-enabled';
+/** Location lat/lng + label is refreshed via geolocation after this TTL (24h). Prayer times still update hourly via API while cache is fresh. */
+const LOCATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const ATHAN_URL = 'https://media.blubrry.com/muslim_central_adhan/content.blubrry.com/muslim_central_adhan/Adhan_Makkah.mp3';
+
+interface LocationCacheEntry {
+  lat: number;
+  lng: number;
+  locationName: string;
+  savedAt: number;
+}
+
+function readLocationCache(): LocationCacheEntry | null {
+  try {
+    const raw = localStorage.getItem(LOCATION_CACHE_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as LocationCacheEntry;
+    if (
+      typeof p.lat !== 'number' ||
+      typeof p.lng !== 'number' ||
+      typeof p.locationName !== 'string' ||
+      typeof p.savedAt !== 'number'
+    ) {
+      return null;
+    }
+    return p;
+  } catch {
+    return null;
+  }
+}
+
+function isLocationCacheFresh(entry: LocationCacheEntry): boolean {
+  return Date.now() - entry.savedAt < LOCATION_CACHE_TTL_MS;
+}
+
+function writeLocationCache(lat: number, lng: number, locationName: string): void {
+  const entry: LocationCacheEntry = {
+    lat,
+    lng,
+    locationName,
+    savedAt: Date.now(),
+  };
+  localStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(entry));
+}
+
+function readAthanEnabled(): boolean {
+  return localStorage.getItem(ATHAN_ENABLED_KEY) === 'true';
+}
 
 const PrayerTimes: React.FC = () => {
   useEffect(() => {
@@ -50,13 +98,17 @@ const PrayerTimes: React.FC = () => {
   const [timeRemaining, setTimeRemaining] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
-  const [locationName, setLocationName] = useState<string>('Detecting location...');
+  const [locationName, setLocationName] = useState<string>(() => {
+    const cached = readLocationCache();
+    if (cached && isLocationCacheFresh(cached)) return cached.locationName;
+    return 'Detecting location...';
+  });
   const [calculationMethod, setCalculationMethod] = useState<number>(() => {
     const savedMethod = localStorage.getItem(STORAGE_KEY);
     return savedMethod ? parseInt(savedMethod) : 2; // Default to ISNA
   });
   const [showCalculationModal, setShowCalculationModal] = useState<boolean>(false);
-  const [isAthanEnabled, setIsAthanEnabled] = useState<boolean>(false);
+  const [isAthanEnabled, setIsAthanEnabled] = useState<boolean>(() => readAthanEnabled());
   
   const countdownIntervalParams = useRef<{ intervalId: NodeJS.Timeout | null, nextPrayerDate: Date | null }>({ intervalId: null, nextPrayerDate: null });
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -109,6 +161,44 @@ const PrayerTimes: React.FC = () => {
   };
 
   useEffect(() => {
+    const cleanTime = (timeStr: string) => timeStr.split(' ')[0];
+
+    const applyTimings = (timings: Record<string, string>) => {
+      setPrayerTimes({
+        fajr: cleanTime(timings.Fajr),
+        sunrise: cleanTime(timings.Sunrise),
+        dhuhr: cleanTime(timings.Dhuhr),
+        asr: cleanTime(timings.Asr),
+        maghrib: cleanTime(timings.Maghrib),
+        isha: cleanTime(timings.Isha),
+        midnight: cleanTime(timings.Midnight),
+      });
+    };
+
+    const fetchPrayerTimesForCoords = async (
+      latitude: number,
+      longitude: number,
+      method: number
+    ): Promise<boolean> => {
+      try {
+        const date = new Date();
+        const dateStr = `${date.getDate()}-${date.getMonth() + 1}-${date.getFullYear()}`;
+        const response = await fetch(
+          `https://api.aladhan.com/v1/timings/${dateStr}?latitude=${latitude}&longitude=${longitude}&method=${method}`
+        );
+        const data = await response.json();
+        if (data.code === 200) {
+          applyTimings(data.data.timings);
+          return true;
+        }
+        setError('Failed to fetch prayer times from Aladhan API');
+        return false;
+      } catch {
+        setError('Network error: Could not load data');
+        return false;
+      }
+    };
+
     const fetchLocationAndPrayers = async () => {
       setLoading(true);
       setError('');
@@ -119,43 +209,38 @@ const PrayerTimes: React.FC = () => {
           return;
         }
 
+        const cached = readLocationCache();
+        if (cached && isLocationCacheFresh(cached)) {
+          setLocationName(cached.locationName);
+          await fetchPrayerTimesForCoords(cached.lat, cached.lng, calculationMethod);
+          setLoading(false);
+          return;
+        }
+
         navigator.geolocation.getCurrentPosition(
           async (position) => {
             const { latitude, longitude } = position.coords;
             try {
-              // 1. Reverse Geocode for City Name
-              const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+              let city = 'Your Location';
+              const geoRes = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+              );
               if (geoRes.ok) {
                 const geoData = await geoRes.json();
-                const city = geoData.address.city || geoData.address.town || geoData.address.village || geoData.address.county || 'Your Location';
-                setLocationName(city);
+                city =
+                  geoData.address.city ||
+                  geoData.address.town ||
+                  geoData.address.village ||
+                  geoData.address.county ||
+                  'Your Location';
               }
+              setLocationName(city);
 
-              // 2. Fetch Prayer Times from Aladhan directly
-              const date = new Date();
-              const dateStr = `${date.getDate()}-${date.getMonth() + 1}-${date.getFullYear()}`;
-              const response = await fetch(
-                `https://api.aladhan.com/v1/timings/${dateStr}?latitude=${latitude}&longitude=${longitude}&method=${calculationMethod}`
-              );
-              const data = await response.json();
-              
-              if (data.code === 200) {
-                const timings = data.data.timings;
-                // Strip timezone suffix e.g. "05:12 (EDT)" -> "05:12"
-                const cleanTime = (timeStr: string) => timeStr.split(' ')[0];
-                setPrayerTimes({
-                  fajr: cleanTime(timings.Fajr),
-                  sunrise: cleanTime(timings.Sunrise),
-                  dhuhr: cleanTime(timings.Dhuhr),
-                  asr: cleanTime(timings.Asr),
-                  maghrib: cleanTime(timings.Maghrib),
-                  isha: cleanTime(timings.Isha),
-                  midnight: cleanTime(timings.Midnight)
-                });
-              } else {
-                setError('Failed to fetch prayer times from Aladhan API');
+              const ok = await fetchPrayerTimesForCoords(latitude, longitude, calculationMethod);
+              if (ok) {
+                writeLocationCache(latitude, longitude, city);
               }
-            } catch (err) {
+            } catch {
               setError('Network error: Could not load data');
             } finally {
               setLoading(false);
@@ -167,14 +252,14 @@ const PrayerTimes: React.FC = () => {
             setLoading(false);
           }
         );
-      } catch (error) {
+      } catch {
         setError('An unexpected error occurred.');
         setLoading(false);
       }
     };
 
     fetchLocationAndPrayers();
-    const intervalId = setInterval(fetchLocationAndPrayers, 1000 * 60 * 60); // Hourly refresh
+    const intervalId = setInterval(fetchLocationAndPrayers, 1000 * 60 * 60); // Hourly prayer refresh; location re-fetched after cache TTL
 
     return () => clearInterval(intervalId);
   }, [calculationMethod]);
@@ -239,8 +324,12 @@ const PrayerTimes: React.FC = () => {
     localStorage.setItem(STORAGE_KEY, calculationMethod.toString());
   }, [calculationMethod]);
 
+  useEffect(() => {
+    localStorage.setItem(ATHAN_ENABLED_KEY, String(isAthanEnabled));
+  }, [isAthanEnabled]);
+
   const toggleAthan = () => {
-    setIsAthanEnabled(!isAthanEnabled);
+    setIsAthanEnabled((prev) => !prev);
     if (!isAthanEnabled && audioRef.current) {
       // Play a short empty sound or load it to unlock audio context in browsers
       audioRef.current.load();
