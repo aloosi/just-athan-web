@@ -11,6 +11,18 @@
 # production
 /build
 
+# local docs / knowledge base
+/.obsidian-docs/
+
+# editor / workspace files
+*.code-workspace
+
+# local tooling / agent artifacts
+/.cursor/
+
+# firebase local caches (generated)
+/.firebase/
+
 # misc
 .DS_Store
 .env.local
