@@ -18,7 +18,8 @@
 
 html, body, #root {
   min-height: 100vh;
-  width: 100vw;
+  min-height: 100dvh;
+  width: 100%;
   background-color: var(--primary-bg);
   color: var(--text-primary);
   font-family: var(--font-inter);

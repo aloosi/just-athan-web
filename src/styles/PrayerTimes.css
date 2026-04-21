@@ -4,12 +4,16 @@
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--glass-border);
   border-radius: 24px;
-  padding: clamp(1.5rem, 4vw, 2.5rem);
-  width: min(95%, 480px);
+  padding: clamp(1rem, 2.4vw, 2rem);
+  width: min(100%, clamp(320px, 92vw, 620px));
+  max-height: calc(
+    100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1.5rem
+  );
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: clamp(0.85rem, 2vh, 1.25rem);
+  overflow-y: auto;
   animation: fadeUp 0.6s ease-out;
 }
 
@@ -127,10 +131,12 @@
   background: linear-gradient(135deg, rgba(212, 175, 55, 0.15), rgba(212, 175, 55, 0.05));
   border: 1px solid var(--accent-gold-glow);
   border-radius: 16px;
-  padding: 1.25rem;
+  padding: clamp(0.85rem, 2vw, 1.25rem);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
   box-shadow: 0 4px 20px var(--accent-gold-glow);
   position: relative;
   overflow: hidden;
@@ -154,19 +160,19 @@
 .highlight-text {
   color: var(--accent-gold);
   font-weight: 700;
-  font-size: 1.25rem;
+  font-size: clamp(1rem, 2.8vw, 1.25rem);
 }
 
 .countdown-timer {
   font-family: 'Courier New', Courier, monospace;
-  font-size: 1.5rem;
+  font-size: clamp(1.1rem, 4vw, 1.5rem);
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: 1px;
 }
 
 .next-prayer-time {
-  font-size: 2rem;
+  font-size: clamp(1.45rem, 5vw, 2rem);
   font-weight: 700;
   color: var(--accent-gold);
   font-family: var(--font-amiri);
@@ -233,7 +239,7 @@
 
 .prayer-name {
   font-weight: 500;
-  font-size: 1.05rem;
+  font-size: clamp(0.95rem, 2.5vw, 1.05rem);
 }
 
 .active-prayer .prayer-name {
@@ -243,9 +249,43 @@
 .prayer-time {
   font-weight: 600;
   font-family: 'Courier New', Courier, monospace;
-  font-size: 1.1rem;
+  font-size: clamp(1rem, 2.8vw, 1.1rem);
 }
 
 .active-prayer .prayer-time {
   color: var(--text-primary);
+}
+
+@media (max-width: 560px) {
+  .prayer-container {
+    border-radius: 18px;
+    width: 100%;
+    max-height: calc(
+      100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem
+    );
+  }
+
+  .prayer-header h1 {
+    font-size: clamp(1.7rem, 7vw, 2.2rem);
+  }
+
+  .method-selector {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-height: 820px) {
+  .prayer-container {
+    gap: 0.85rem;
+  }
+
+  .loading-state,
+  .error-state {
+    padding: 1.25rem 0;
+  }
+
+  .prayer-row {
+    padding: 0.7rem 0.85rem;
+  }
 }
